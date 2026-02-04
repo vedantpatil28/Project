@@ -1,0 +1,27 @@
+@WebMvcTest(MyController.class)
+public class TestMyController {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockitoBean
+    private StudentBusinessLogic studentServiceObj;
+
+    @Test
+    public void testGetAllStudents() throws Exception {
+        // Arrange
+        List<Student> studentLst = List.of(
+            new Student(28, "Vedant", "Engg", 98),
+            new Student(26, "Rucha", "Engg", 98)
+        );
+        
+        when(studentServiceObj.getAllStudents()).thenReturn(studentLst);
+
+        // Act & Assert
+        mockMvc.perform(get("/getAllStudents"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2)) // Verify list size
+                .andExpect(jsonPath("$[0].name").value("Vedant"))
+                .andExpect(jsonPath("$[1].name").value("Rucha"));
+    }
+}
