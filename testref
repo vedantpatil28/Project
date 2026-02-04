@@ -1,27 +1,206 @@
-@WebMvcTest(MyController.class)
-public class TestMyController {
+package com.example.demo.controller;
+
+import com.example.demo.analyticsdto.GraphResponseDTO;
+import com.example.demo.data.Report;
+import com.example.demo.service.AnalyticsService;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.LocalDate;
+import java.util.List;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@WebMvcTest(AnalyticsController.class)
+public class AnalyticsControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @MockitoBean
-    private StudentBusinessLogic studentServiceObj;
+    @MockBean
+    private AnalyticsService analyticsService;
+
+    // ---------- ANALYTICS TEST ----------
 
     @Test
-    public void testGetAllStudents() throws Exception {
-        // Arrange
-        List<Student> studentLst = List.of(
-            new Student(28, "Vedant", "Engg", 98),
-            new Student(26, "Rucha", "Engg", 98)
-        );
-        
-        when(studentServiceObj.getAllStudents()).thenReturn(studentLst);
+    public void testParticipationStatus() throws Exception {
+        GraphResponseDTO dto =
+                new GraphResponseDTO(
+                        List.of("ACTIVE", "INACTIVE"),
+                        List.of(10.0, 5.0)
+                );
 
-        // Act & Assert
-        mockMvc.perform(get("/getAllStudents"))
+        when(analyticsService.participationStatus()).thenReturn(dto);
+
+        mockMvc.perform(get("/api/analytics/participation/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2)) // Verify list size
-                .andExpect(jsonPath("$[0].name").value("Vedant"))
-                .andExpect(jsonPath("$[1].name").value("Rucha"));
+                .andExpect(jsonPath("$.x.length()").value(2))
+                .andExpect(jsonPath("$.x[0]").value("ACTIVE"))
+                .andExpect(jsonPath("$.y[0]").value(10.0));
+    }
+
+    // ---------- REPORT READ ALL ----------
+
+    @Test
+    public void testGetAllReports() throws Exception {
+        List<Report> reports = List.of(
+                new Report(1L, "ORG", "Metrics 1", LocalDate.now()),
+                new Report(2L, "MANAGER", "Metrics 2", LocalDate.now())
+        );
+
+        when(analyticsService.getAllReports()).thenReturn(reports);
+
+        mockMvc.perform(get("/api/analytics/reports"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].scope").value("ORG"))
+                .andExpect(jsonPath("$[1].scope").value("MANAGER"));
+    }
+
+    // ---------- REPORT READ BY ID ----------
+
+    @Test
+    public void testGetReportById() throws Exception {
+        Report report =
+                new Report(1L, "ORG", "Participation Metrics", LocalDate.now());
+
+        when(analyticsService.getReportById(1L)).thenReturn(report);
+
+        mockMvc.perform(get("/api/analytics/reports/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scope").value("ORG"))
+                .andExpect(jsonPath("$.metrics").value("Participation Metrics"));
+    }
+}
+
+
+
+
+
+
+Service
+
+package com.example.demo.service;
+
+import com.example.demo.analyticsdto.ReportRequestDTO;
+import com.example.demo.data.Report;
+import com.example.demo.repository.ReportRepository;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.*;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+public class AnalyticsServiceTest {
+
+    @Mock
+    private ReportRepository reportRepository;
+
+    @InjectMocks
+    private AnalyticsService analyticsService;
+
+    // ---------- CREATE ----------
+
+    @Test
+    public void testCreateReport() {
+        ReportRequestDTO dto = new ReportRequestDTO();
+        dto.setScope("ORG");
+        dto.setMetrics("Test Metrics");
+
+        Report savedReport =
+                new Report(1L, "ORG", "Test Metrics", LocalDate.now());
+
+        when(reportRepository.save(any(Report.class)))
+                .thenReturn(savedReport);
+
+        Report result = analyticsService.createReport(dto);
+
+        assertNotNull(result);
+        assertEquals("ORG", result.getScope());
+        assertEquals("Test Metrics", result.getMetrics());
+        verify(reportRepository, times(1)).save(any(Report.class));
+    }
+
+    // ---------- READ ALL ----------
+
+    @Test
+    public void testGetAllReports() {
+        List<Report> reports = List.of(
+                new Report(1L, "ORG", "M1", LocalDate.now()),
+                new Report(2L, "MANAGER", "M2", LocalDate.now())
+        );
+
+        when(reportRepository.findAll()).thenReturn(reports);
+
+        List<Report> result = analyticsService.getAllReports();
+
+        assertEquals(2, result.size());
+        verify(reportRepository).findAll();
+    }
+
+    // ---------- READ BY ID ----------
+
+    @Test
+    public void testGetReportById() {
+        Report report =
+                new Report(1L, "ORG", "Metrics", LocalDate.now());
+
+        when(reportRepository.findById(1L))
+                .thenReturn(Optional.of(report));
+
+        Report result = analyticsService.getReportById(1L);
+
+        assertEquals("ORG", result.getScope());
+        assertEquals("Metrics", result.getMetrics());
+    }
+
+    // ---------- UPDATE ----------
+
+    @Test
+    public void testUpdateReport() {
+        Report report =
+                new Report(1L, "ORG", "Old Metrics", LocalDate.now());
+
+        when(reportRepository.findById(1L))
+                .thenReturn(Optional.of(report));
+        when(reportRepository.save(report))
+                .thenReturn(report);
+
+        ReportRequestDTO dto = new ReportRequestDTO();
+        dto.setScope("MANAGER");
+        dto.setMetrics("Updated Metrics");
+
+        Report updated = analyticsService.updateReport(1L, dto);
+
+        assertEquals("MANAGER", updated.getScope());
+        assertEquals("Updated Metrics", updated.getMetrics());
+        verify(reportRepository).save(report);
+    }
+
+    // ---------- DELETE ----------
+
+    @Test
+    public void testDeleteReport() {
+        Report report =
+                new Report(1L, "ORG", "Metrics", LocalDate.now());
+
+        when(reportRepository.findById(1L))
+                .thenReturn(Optional.of(report));
+
+        analyticsService.deleteReport(1L);
+
+        verify(reportRepository, times(1)).delete(report);
     }
 }
